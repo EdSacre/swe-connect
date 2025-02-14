@@ -1,0 +1,30 @@
+---
+title: "R Notebook"
+---
+
+# Kernel density function showing the relationship 
+# between distance between habitats (along the least cost path) and connectivity
+```{r}
+library(ggplot2)
+
+a <- 0.3
+dmax <- 10000
+kern <- function(d){exp(-1*(d/(a*dmax)))}
+
+kern.plot <- ggplot(data.frame(x = c(0, 10000)), aes(x = x)) +
+             stat_function(fun = kern, geom = "line", colour = "#3288bd", linewidth = 1) +
+             ylab(expression(Connectivity~export~(k[paste(i,",",j)])))+
+             xlab(expression(Distance~between~habitats~(d[paste(i,",",j)])))+
+             theme_classic()
+
+kern.plot
+```
+
+# Export figure
+```{r}
+jpeg(filename = "figures/dispersal_kernel.jpg", width=3000, height=2500, res=600)
+kern.plot
+dev.off()
+```
+
+

@@ -2,11 +2,11 @@
 #/*
 
 # block all files
-*.*
+*.mtx
 
 # add files that we want...
 
-!*.r
-!*.rmd
-!.gitignore
-!*.Rproj
+#!*.r
+#!*.rmd
+#!.gitignore
+#!*.Rproj

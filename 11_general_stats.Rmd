@@ -1,0 +1,58 @@
+---
+title: "R Notebook"
+---
+# This code provides general statistics about the study area and other analyses
+# Import layers
+```{r}
+# Grid/planning units
+grid <- rast("grid.tif")
+grid <- grid + 1
+
+# Import MPA network
+mpa <- rast("outputs/mpas/mpas.tif")
+mpa <- app(mpa, fun = "sum")
+mpa <- mpa*grid
+```
+
+# Size of study area
+```{r}
+# Resolution is 250m, so divide by 16 to get square kms
+cat("Total study area:", sum(values(grid), na.rm = T)/16, "km2")
+cat("\nTotal pixels:", sum(values(grid), na.rm = T))
+```
+
+# Proportion of total protected area with ICUN category
+```{r}
+mpas <- rast("outputs/mpas/mpas.tif")
+iuc <- mpas[[4:8]]
+iuc <- app(iuc, fun = "sum")
+mpa_all <- app(mpas, fun = "sum")
+
+p <- sum(values(iuc), na.rm = T) / sum(values(mpa_all), na.rm = T)
+cat("Total % of protected area with ICUN classification: ", p*100)
+```
+
+# Caclulate % MPA area in study area
+```{r}
+mpa <- rast("outputs/mpas/mpas.tif")
+# Note there are no category II reserves in the study area, though they would be considered strict
+mpa_strict <- mpa[[c("Nature reserve (Ia)", "Nature reserve (Ib)")]] 
+mpa_strict <- app(mpa_strict, fun = "sum")
+mpa <- app(mpa, fun = "sum")
+mpa <- mpa*grid
+
+# All MPAs
+mpa_cells <- sum(values(mpa, na.rm = T))
+mpa_prop <- sum(values(mpa, na.rm = T)) / sum(values(grid, na.rm = T))
+
+cat("\nNumber of MPA cells:", mpa_cells)
+cat("\nProportion of study area covered by MPA network:", mpa_prop)
+
+# Strict MPAs
+mpa_cells_strict <- sum(values(mpa_strict, na.rm = T))
+mpa_prop_strict <- sum(values(mpa_strict, na.rm = T)) / sum(values(grid, na.rm = T))
+
+cat("\nNumber of strict MPA cells:", mpa_cells_strict)
+cat("\nProportion of study area covered by strict MPAs:", mpa_prop_strict)
+```
+

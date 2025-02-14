@@ -1,0 +1,157 @@
+---
+title: "R Notebook"
+---
+
+# Load packages
+```{r}
+library(terra)
+library(rio)
+library(tidyterra)
+```
+
+# Process MPA shapefiles
+```{r}
+# Nature reserves
+mpa <- vect("inputs/mpas/NR/NR_polygon.shp", opts = "ENCODING=UTF-8")
+mpa_list <- read.csv("inputs/mpas/MPAs_Sverige_Mars_2024.csv")
+mpa_list <- filter(mpa_list, SKYDDSTYP == "Naturreservat")
+mpa_list <- select(mpa_list, NAMN)
+
+mpa_list$mpa <- 1
+mpa$pa <- 1
+mpa <- full_join(mpa, mpa_list, by = "NAMN")
+mpa <- filter(mpa, mpa == 1)
+
+if(any(is.na(mpa$pa))){cat("WARNING: Some MPAs are not in the shapefile")}
+temp <- as.data.frame(mpa)
+nr <- mpa
+plot(nr)
+
+# OBO
+mpa <- vect("inputs/mpas/OBO/OBO_polygon.shp", opts = "ENCODING=UTF-8")
+mpa_list <- read.csv("inputs/mpas/MPAs_Sverige_Mars_2024.csv")
+mpa_list <- filter(mpa_list, SKYDDSTYP == "Övrigt biotopskyddsområde")
+mpa_list <- select(mpa_list, NAMN)
+
+mpa_list$mpa <- 1
+mpa$pa <- 1
+mpa <- full_join(mpa, mpa_list, by = "NAMN")
+mpa <- filter(mpa, mpa == 1)
+
+if(any(is.na(mpa$pa))){cat("WARNING: Some MPAs are not in the shapefile")}
+temp <- as.data.frame(mpa)
+obo <- mpa
+plot(obo)
+
+# SCI
+mpa <- vect("inputs/mpas/SCI_ej_alvar_rikstackande/SCI_ej_alvar_rikstackande.shp", opts = "ENCODING=WINDOWS-1252")
+mpa_list <- read.csv("inputs/mpas/MPAs_Sverige_Mars_2024.csv")
+mpa_list <- filter(mpa_list, SKYDDSTYP == "SCI")
+mpa_list <- select(mpa_list, NAMN)
+
+mpa_list$mpa <- 1
+mpa$pa <- 1
+mpa <- full_join(mpa, mpa_list, by = "NAMN")
+mpa <- filter(mpa, mpa == 1)
+names(mpa)[names(mpa) == "OMRADESTYP"] <- "SKYDDSTYP"
+
+if(any(is.na(mpa$pa))){cat("WARNING: Some MPAs are not in the shapefile")}
+temp <- as.data.frame(mpa)
+sci <- mpa
+
+plot(sci)
+
+# Export
+mpa <- rbind(nr, obo, sci)
+mpa_df <- as.data.frame(mpa)
+dir.create("inputs/mpas/MPAs_Sweden_Mar2024")
+writeVector(mpa, "inputs/mpas/MPAs_Sweden_Mar2024/MPAs_Sweden_Mar2024.shp", filetype = "ESRI Shapefile", overwrite = TRUE)
+```
+
+# Rasterize MPA categories and export 
+```{r}
+pu <- rast("grid.tif")+1
+mpa <- vect("inputs/mpas/MPAs_Sweden_Mar2024/MPAs_Sweden_Mar2024.shp")
+mpa$mpa <- 1
+mpa <- project(mpa, pu)
+mpa <- crop(mpa, pu)
+mpa$class <- NA
+
+ind <- which(mpa$SKYDDSTYP == "Naturreservat" & mpa$IUCNKAT == "0, Områden som ej kan klassificeras enligt IUCN: s system.")
+mpa$class[ind] <- "Nature reserve (Not classified)"
+ind <- which(mpa$SKYDDSTYP == "Naturreservat" & mpa$IUCNKAT == "Ia, Strikt naturreservat (Strict Nature Reserve)")
+mpa$class[ind] <- "Nature reserve (Ia)"
+ind <- which(mpa$SKYDDSTYP == "Naturreservat" & mpa$IUCNKAT == "Ib, Vildmarksområde (Wilderness Area)")
+mpa$class[ind] <- "Nature reserve (Ib)"
+ind <- which(mpa$SKYDDSTYP == "Naturreservat" & mpa$IUCNKAT == "II, Nationalpark (National Park)")
+mpa$class[ind] <- "Nature reserve (II)"
+ind <- which(mpa$SKYDDSTYP == "Naturreservat" & mpa$IUCNKAT == "III, Naturmonument (Natural Monument)")
+mpa$class[ind] <- "Nature reserve (III)"
+ind <- which(mpa$SKYDDSTYP == "Naturreservat" & mpa$IUCNKAT == "IV, Habitat/Artskyddsområde (Habitat/Species Management Area)")
+mpa$class[ind] <- "Nature reserve (IV)"
+ind <- which(mpa$SKYDDSTYP == "Naturreservat" & mpa$IUCNKAT == "V, Skyddat landskap/havsområde (Protected Landscape/Seascape)")
+mpa$class[ind] <- "Nature reserve (V)"
+
+ind <- which(mpa$SKYDDSTYP == "Övrigt biotopskyddsområde")
+mpa$class[ind] <- "Biotope area"
+
+ind <- which(mpa$SKYDDSTYP == "SCI")
+mpa$class[ind] <- "Site of Community Importance"
+mpa_orig <- mpa
+mpadf <- as.data.frame(mpa)
+
+mpadf$class <- factor(mpadf$class, levels = c("Biotope area",
+                                                 "Site of Community Importance",
+                                                 "Nature reserve (Not classified)",
+                                                 "Nature reserve (V)",
+                                                 "Nature reserve (IV)",
+                                                 "Nature reserve (III)",
+                                                 "Nature reserve (Ib)",
+                                                 "Nature reserve (Ia)"))
+classes <- levels(mpadf$class)
+r <- rast()
+
+for(i in 1:length(classes)){
+  mpa <- mpa_orig
+  mpa <- mpa[mpa$class == classes[i]] # Choose class
+  mpa <- rasterize(mpa, pu, field = "mpa", fun = "max")
+  mpa[is.na(mpa)] <- 0
+  mpa <- (mpa + pu)-1
+  r <- c(r, mpa)
+  cat("Iteration", i , "done")
+}
+
+mpa <- r
+names(mpa) <- classes
+plot(mpa)
+```
+
+# For areas covered by multiple categories, assume the stricter protection
+# Note there are no category II MPAs in the study area
+```{r}
+cats <- c("Biotope area",
+          "Site of Community Importance",
+          "Nature reserve (Not classified)",
+          "Nature reserve (V)",
+          "Nature reserve (IV)",
+          "Nature reserve (III)",
+          "Nature reserve (Ib)",
+          "Nature reserve (Ia)")
+ 
+# For areas covered by multiple categories, assume the stricter protection
+for(i in 1:7){
+  cat <- cats[i]
+  nr <- mpa[[i+1:8]]
+  nr <- app(nr, fun = "sum")
+  nr[nr > 0] <- 1
+  mpa[[cat]] <- mpa[[cat]] - nr
+  mpa[[cat]][mpa[[cat]] < 0] <- 0
+}
+
+dr <- "outputs/mpas"
+if(!dir.exists(dr)){dir.create(dr, recursive = T)}
+writeRaster(mpa, "outputs/mpas/mpas.tif", overwrite = T)
+temp <- app(mpa, fun = "sum")
+writeRaster(temp, "outputs/mpas/mpas_sum.tif", overwrite = T)
+plot(temp)
+```

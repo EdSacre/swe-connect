@@ -1,0 +1,260 @@
+---
+title: "R Notebook"
+---
+
+# Load packages
+```{r}
+library(terra)
+library(prioritizr)
+library(sf)
+library(ggplot2)
+library(dplyr)
+library(tidyr)
+library(rio)
+library(ggthemes)
+library(ggpubr)
+library(gridExtra)
+library(cowplot)
+meta <- rio::import("spec_list.xlsx", sheet = "species")
+```
+
+# Import grid/planning units
+```{r}
+# Create base planning units
+pu <- rast("grid.tif")+1
+plot(pu)
+```
+
+# Import MPA network
+```{r}
+mpa <- rast("outputs/mpas/mpas.tif")
+# Note there are no category II reserves in the study area, though they would be considered strict
+mpa_strict <- mpa[[c("Nature reserve (Ia)", "Nature reserve (Ib)")]] 
+mpa_strict <- app(mpa_strict, fun = "sum")
+mpa <- app(mpa, fun = "sum")
+mpa <- mpa*pu
+plot(c(pu, mpa))
+```
+
+# Determine area of network
+```{r}
+# All MPAs
+mpa_cells <- sum(values(mpa, na.rm = T))
+mpa_prop <- sum(values(mpa, na.rm = T)) / sum(values(pu, na.rm = T))
+
+cat("\nNumber of MPA cells:", mpa_cells)
+cat("\nProportion of study area covered by MPA network:", mpa_prop)
+
+# Strict MPAs
+mpa_cells_strict <- sum(values(mpa_strict, na.rm = T))
+mpa_prop_strict <- sum(values(mpa_strict, na.rm = T)) / sum(values(pu, na.rm = T))
+
+cat("\nNumber of strict MPA cells:", mpa_cells_strict)
+cat("\nProportion of study area covered by strict MPAs:", mpa_prop_strict)
+```
+
+# Import features
+```{r}
+meta <- rio::import("spec_list.xlsx", sheet = "species")
+l1 <- list.files("outputs/connectivity_source_strength", pattern = "\\.tif$", full.names = TRUE)
+l2 <- list.files("outputs/connectivity_vulnerability", pattern = "\\.tif$", full.names = TRUE)
+l3 <- list.files("inputs/habs_standard", pattern = "\\.tif$", full.names = TRUE)
+l <- c(l1,l2, l3)
+
+n1 <- list.files("outputs/connectivity_source_strength", pattern = "\\.tif$")
+n2 <- list.files("outputs/connectivity_vulnerability", pattern = "\\.tif$")
+n3 <- list.files("inputs/habs_standard", pattern = "\\.tif$")
+n <- c(n1,n2,n3)
+n <- tools::file_path_sans_ext(n)
+
+feat <- rast(l)
+names(feat) <- n
+feat <- feat * pu
+plot(feat)
+```
+
+############################### Section break ###############################
+# Proportion of each feature in the full MPA network
+```{r}
+df <- data.frame()
+
+for(i in 1:nlyr(feat)){
+  m <- matrix(nrow = nlyr(mpa), ncol = 4)
+  colnames(m) <- c("spec", "spec_total",  "class", "spec_class")
+  dftemp <- as_tibble(m)
+  
+  spec <- feat[[i]]
+  temp <- spec * mpa
+  
+  sc <- sapply(1:nlyr(temp), function(i) sum(values(temp[[i]]), na.rm = TRUE))
+  
+  dftemp$spec <- names(spec)
+  dftemp$spec_total <- sum(values(spec), na.rm = TRUE)
+  dftemp$class <- names(mpa)
+  dftemp$spec_class <- sc
+  
+  df <- rbind(df, dftemp)
+}
+
+df$spec_prop <- df$spec_class / df$spec_total
+df_mpa <- df
+```
+
+# Proportion of each feature in the strict MPA network
+```{r}
+df <- data.frame()
+
+for(i in 1:nlyr(feat)){
+  m <- matrix(nrow = nlyr(mpa_strict), ncol = 4)
+  colnames(m) <- c("spec", "spec_total",  "class", "spec_class")
+  dftemp <- as_tibble(m)
+  
+  spec <- feat[[i]]
+  temp <- spec * mpa_strict
+  
+  sc <- sapply(1:nlyr(temp), function(i) sum(values(temp[[i]]), na.rm = TRUE))
+  
+  dftemp$spec <- names(spec)
+  dftemp$spec_total <- sum(values(spec), na.rm = TRUE)
+  dftemp$class <- names(mpa_strict)
+  dftemp$spec_class <- sc
+  
+  df <- rbind(df, dftemp)
+}
+
+df$spec_prop <- df$spec_class / df$spec_total
+df_mpa_strict <- df
+```
+
+############################### Section break ###############################
+# Show coverage of full MPA network and strict MPA network
+```{r}
+fdf <- data.frame("species" = rep(meta$english, 3))
+fdf$feature <- NA
+fdf$feature[1:16] <- "Source connectivity"
+fdf$feature[17:32] <- "Vulnerability"
+fdf$feature[33:48] <- "Habitat"
+
+fdf$prop_mpa <- round(df_mpa$spec_prop*100, digits = 0)
+fdf$prop_mpa_strict <- round(df_mpa_strict$spec_prop*100, digits = 0)
+
+pdf <- filter(fdf, feature == "Source connectivity")
+pdf <- pdf %>% arrange(-prop_mpa)
+ord <- pdf$species
+pdf$species <- factor(pdf$species, levels = ord)
+
+g1 <- ggplot(pdf, aes(y = species))+
+  geom_vline(xintercept = (mpa_prop*100), colour = "#4f94cd90", linetype = "dashed")+
+  geom_vline(xintercept = (mpa_prop_strict*100), colour = "grey60", linetype = "dashed")+
+  geom_segment(aes(x = prop_mpa_strict, xend = prop_mpa, yend = species), colour = "grey80", size = 1)+
+  geom_point(aes(x = prop_mpa), size = 4, color = "#4f94cd")+
+  geom_point(aes(x = prop_mpa_strict), size = 4, color = "grey70")+
+  scale_x_continuous(limits = c(0, 75), breaks = c(0,25,50,75))+
+  xlab("Percentage protection (%)")+
+  ylab("")+
+  labs(title = "")+
+  theme(plot.margin = unit(c(0,0,0,0), "cm"))+
+  theme_classic()
+
+g1
+
+pdf <- filter(fdf, feature == "Vulnerability")
+pdf <- pdf %>% arrange(factor(species, levels = ord))
+pdf$species <- factor(pdf$species, levels = ord)
+
+g2 <- ggplot(pdf, aes(y = species))+
+  geom_vline(xintercept = (mpa_prop*100), colour = "#cd853f90", linetype = "dashed")+
+  geom_vline(xintercept = (mpa_prop_strict*100), colour = "grey60", linetype = "dashed")+
+  geom_segment(aes(x = prop_mpa_strict, xend = prop_mpa, yend = species), colour = "grey80", size = 1)+
+  geom_point(aes(x = prop_mpa), size = 4, color = "tan3")+
+  geom_point(aes(x = prop_mpa_strict), size = 4, color = "grey70")+
+  scale_x_continuous(limits = c(0, 75), breaks = c(0,25,50,75))+
+  xlab("Percentage protection (%)")+
+  ylab("")+
+  labs(title = "")+
+  theme(plot.margin = unit(c(0,0,0,0), "cm"))+
+  theme_classic()
+
+g2
+
+pdf <- filter(fdf, feature == "Habitat")
+pdf <- pdf %>% arrange(factor(species, levels = ord))
+pdf$species <- factor(pdf$species, levels = ord)
+
+g3 <- ggplot(pdf, aes(y = species))+
+  geom_vline(xintercept = (mpa_prop*100), colour = "#41ae7690", linetype = "dashed")+
+  geom_vline(xintercept = (mpa_prop_strict*100), colour = "grey60", linetype = "dashed")+
+  geom_segment(aes(x = prop_mpa_strict, xend = prop_mpa, yend = species), colour = "grey80", size = 1)+
+  geom_point(aes(x = prop_mpa), size = 4, color = "#41ae76")+
+  geom_point(aes(x = prop_mpa_strict), size = 4, color = "grey70")+
+  scale_x_continuous(limits = c(0, 75), breaks = c(0,25,50,75))+
+  xlab("Percentage protection (%)")+
+  ylab("")+
+  labs(title = "")+
+  theme(plot.margin = unit(c(0,0,0,0), "cm"))+
+  theme_classic()
+
+g3
+
+# Combined plot
+jpeg(filename = "figures/coverage_dumbell_strict.jpg", width=8000, height=3500, res=600)
+plot_grid(g1, g2, g3, ncol = 3, nrow = 1)
+dev.off()
+
+jpeg(filename = "figures/coverage_dumbell_strict1.jpg", width=2800, height=3400, res=700)
+g1
+dev.off()
+jpeg(filename = "figures/coverage_dumbell_strict2.jpg", width=2800, height=3400, res=700)
+g2
+dev.off()
+jpeg(filename = "figures/coverage_dumbell_strict3.jpg", width=2800, height=3400, res=700)
+g3
+dev.off()
+```
+
+############################### Section break ###############################
+# Statistics on protection of features
+```{r}
+fdf <- data.frame("species" = rep(meta$english, 3))
+fdf$feature <- NA
+fdf$feature[1:16] <- "Source connectivity"
+fdf$feature[17:32] <- "Vulnerability"
+fdf$feature[33:48] <- "Habitat"
+
+fdf$prop_mpa <- round(df_mpa$spec_prop*100, digits = 4)
+fdf$prop_mpa_strict <- round(df_mpa_strict$spec_prop*100, digits = 4)
+
+# Export protection % by feature
+write.csv(fdf, "outputs/mpa_network_assessment.csv", row.names = F)
+
+x <- fdf$prop_mpa[fdf$feature == "Source connectivity"]
+m <- mean(x)
+se <- sd(x)/sqrt(length(x))
+cat("\nMean percentage of source connectivity protected within full MPA network:", m, "%, SE = ", se)
+
+x <- fdf$prop_mpa[fdf$feature == "Vulnerability"]
+m <- mean(x)
+se <- sd(x)/sqrt(length(x))
+cat("\nMean percentage of vulnerability protected within full MPA network:", m, "%, SE = ", se)
+
+x <- fdf$prop_mpa[fdf$feature == "Habitat"]
+m <- mean(x)
+se <- sd(x)/sqrt(length(x))
+cat("\nMean percentage of habitat protected within full MPA network:", m, "%, SE = ", se)
+
+x <- fdf$prop_mpa_strict[fdf$feature == "Source connectivity"]
+m <- mean(x)
+se <- sd(x)/sqrt(length(x))
+cat("\nMean percentage of source connectivity protected within strict MPAs:", m, "%, SE = ", se)
+
+x <- fdf$prop_mpa_strict[fdf$feature == "Vulnerability"]
+m <- mean(x)
+se <- sd(x)/sqrt(length(x))
+cat("\nMean percentage of vulnerability protected within strict MPAs:", m, "%, SE = ", se)
+
+x <- fdf$prop_mpa_strict[fdf$feature == "Habitat"]
+m <- mean(x)
+se <- sd(x)/sqrt(length(x))
+cat("\nMean percentage of habitat protected within strict MPAs:", m, "%, SE = ", se)
+```
+

@@ -1,0 +1,49 @@
+---
+title: "R Notebook"
+---
+
+# These are summary maps for the supporting web application
+```{r}
+library(terra)
+if(!dir.exists("outputs/supp_outputs")){dir.create("outputs/supp_outputs", recursive = T)}
+grid <- rast("grid.tif")+1
+```
+
+# Mean connectivity (export) across all species
+```{r}
+meta <- rio::import("spec_list.xlsx", sheet = "species")
+l <- list.files("outputs/connectivity_source_strength", pattern = "\\.tif$", full.names = TRUE)
+n <- list.files("outputs/connectivity_source_strength", pattern = "\\.tif$")
+feat <- rast(l)
+names(feat) <- n
+feat[is.na(feat)] <- 0
+temp <- app(feat, fun = "mean")
+temp[temp == 0] <- NA
+writeRaster(temp, "outputs/supp_outputs/source_strength_mean.tif", overwrite = TRUE)
+```
+
+# Mean vulnerability across all species
+```{r}
+meta <- rio::import("spec_list.xlsx", sheet = "species")
+l <- list.files("outputs/connectivity_vulnerability", pattern = "\\.tif$", full.names = TRUE)
+n <- list.files("outputs/connectivity_vulnerability", pattern = "\\.tif$")
+feat <- rast(l)
+names(feat) <- n
+feat[is.na(feat)] <- 0
+temp <- app(feat, fun = "mean")
+temp[temp == 0] <- NA
+writeRaster(temp, "outputs/supp_outputs/connectivity_vulnerability_mean.tif", overwrite = TRUE)
+```
+
+# Species richness
+```{r}
+meta <- rio::import("spec_list.xlsx", sheet = "species")
+l <- list.files("inputs/habs_standard", pattern = "\\.tif$", full.names = TRUE)
+n <- list.files("inputs/habs_standard", pattern = "\\.tif$")
+feat <- rast(l)
+names(feat) <- n
+feat[is.na(feat)] <- 0
+temp <- app(feat, fun = "sum")
+temp[temp == 0] <- NA
+writeRaster(temp, "outputs/supp_outputs/habs_richness.tif", overwrite = TRUE)
+```
