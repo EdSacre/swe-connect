@@ -1,0 +1,12 @@
+# exclude everything except selected directorys and files
+#/*
+
+# block all files
+*.*
+
+# add files that we want...
+
+!*.r
+!*.rmd
+!.gitignore
+!*.Rproj
