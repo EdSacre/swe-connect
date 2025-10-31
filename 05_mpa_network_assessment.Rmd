@@ -150,7 +150,7 @@ g1 <- ggplot(pdf, aes(y = species))+
   geom_point(aes(x = prop_mpa), size = 4, color = "#4f94cd")+
   geom_point(aes(x = prop_mpa_strict), size = 4, color = "grey70")+
   scale_x_continuous(limits = c(0, 75), breaks = c(0,25,50,75))+
-  xlab("Percentage protection (%)")+
+  xlab("Protection (%)")+
   ylab("")+
   labs(title = "")+
   theme(plot.margin = unit(c(0,0,0,0), "cm"))+
@@ -169,7 +169,7 @@ g2 <- ggplot(pdf, aes(y = species))+
   geom_point(aes(x = prop_mpa), size = 4, color = "tan3")+
   geom_point(aes(x = prop_mpa_strict), size = 4, color = "grey70")+
   scale_x_continuous(limits = c(0, 75), breaks = c(0,25,50,75))+
-  xlab("Percentage protection (%)")+
+  xlab("Protection (%)")+
   ylab("")+
   labs(title = "")+
   theme(plot.margin = unit(c(0,0,0,0), "cm"))+
@@ -188,7 +188,7 @@ g3 <- ggplot(pdf, aes(y = species))+
   geom_point(aes(x = prop_mpa), size = 4, color = "#41ae76")+
   geom_point(aes(x = prop_mpa_strict), size = 4, color = "grey70")+
   scale_x_continuous(limits = c(0, 75), breaks = c(0,25,50,75))+
-  xlab("Percentage protection (%)")+
+  xlab("Protection (%)")+
   ylab("")+
   labs(title = "")+
   theme(plot.margin = unit(c(0,0,0,0), "cm"))+

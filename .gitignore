@@ -10,3 +10,4 @@
 #!*.rmd
 #!.gitignore
 #!*.Rproj
+.Rproj.user
