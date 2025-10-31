@@ -11,3 +11,4 @@
 #!.gitignore
 #!*.Rproj
 .Rproj.user
+.Rhistory
